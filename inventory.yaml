@@ -1,0 +1,5 @@
+all:
+  children:
+    redis_hosts:
+      hosts:
+        redis-server.com:

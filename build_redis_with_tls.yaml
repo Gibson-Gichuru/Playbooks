@@ -1,0 +1,73 @@
+---
+- name: Install redis with TLS Enabled
+  hosts: redis_hosts
+  become: yes
+  tasks:
+
+  - name: Update
+    apt:
+      update_cache: yes
+      
+  - name: Upgrade
+    apt:
+      upgrade: yes
+
+  - name: Dependencies
+    apt:
+      name:
+        - build-essential
+        - tcl
+        - tcl-tls
+        - redis-tools
+        - libssl-dev
+      state: present
+
+  - name: redisdb group
+    group:
+      name: redisdb
+      state: present
+
+  - name: Unprivileged system user
+    user:
+      name: redisdb
+      group: redisdb
+      shell: /usr/sbin/nologin
+      createhome: no
+      system: yes
+
+  - name: Creating the logging DIR
+    file:
+      path: /var/log/redis
+      state: directory
+      owner: redisdb
+      group: redisdb
+      mode: "0770"
+
+  - name: Logging file with set permissions
+    file:
+      path: /var/log/redis/redis.log
+      state: touch
+      owner: redisdb
+      group: redisdb
+      mode: "0640"
+
+  - name: Download Latest Redis Source File
+
+    command: wget https://download.redis.io/redis-stable.tar.gz -P /tmp/
+
+  - name: Extract Redis Source
+
+    command: tar -xzvf /tmp/redis-stable.tar.gz -C /tmp
+
+  - name: Build source with TLS enabled 
+    shell: >
+      cd /tmp/redis-stable && BUILD_TLS=yes make install
+
+  - name: copy config to the server
+    copy:
+      src: redis.conf
+      dest: /etc/redis/reds.conf
+      owner: redisdb
+      group: redisdb
+      mode: "0640"
+      force: yes

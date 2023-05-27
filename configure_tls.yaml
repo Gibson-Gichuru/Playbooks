@@ -1,0 +1,68 @@
+---
+- name: Configure Redis to use TlS
+  hosts: redis_hosts
+  become: yes
+  gather_facts: no
+
+  tasks:
+
+  - name: Generate Issuing Certificate and Key
+    shell: >
+      cd /tmp && openssl genrsa -out ca.key 4096 && \
+      openssl req \
+      -x509 -new -nodes -sha256 \
+      -key ca.key
+      -days 3650 \
+      -subj '/O=RedisLabs/CN=Redis Production CA' \
+      -out ca.crt && \
+      mv ca.key /etc/ssl/private && \
+      mv ca.crt /usr/local/share/ca-certificates
+
+  - name: Generate Redis Server Certificate and Key
+    shell: >
+      cd /tmp && \
+      openssl genrsa -out redis.key 2048 && \
+      openssl req -new -sha256 -key redis.key \
+      -subj '/O=RedisLabs/CN=Production Server Certificate' | \
+      openssl x509 -req -sha256 \
+      -CA /usr/local/share/ca-certificates/ca.crt \
+      -CAkey /etc/ssl/private/ca.key \
+      -CAcreateserial -days 365 -out redis.crt && \
+      mv redis.key /etc/ssl/private && \
+      mv redis.crt /etc/ssl/
+
+  - name: Generate Client Certificate and Key
+    shell: >
+      cd /tmp && openssl genrsa -out client.key 2048 && \
+      openssl req -new -sha256 -key client.key \
+      -subj '/O=RedisLabs/CN=Redis Client Certificate' | \
+      openssl x509 -req -sha256 \
+      -CA /usr/local/share/ca-certificates/ca.crt
+      -CAkey /etc/ssl/private/ca.key
+      -CAcreateserial -days 365 -out client.crt && \
+      mv client.* /etc/ssl/ && \
+      chown ubuntu:ubuntu /etc/ssl/* && \
+      chmod 640 /etc/ssl/*
+
+  - name: Permissions Setup
+    shell: > 
+      chown redisdb:redisdb /etc/ssl/*.crt && \
+      chmod 644 /etc/ssl/*.crt
+
+  - name: CA Permissions Setup
+    shell: >
+      chown redisdb:redisdb /usr/local/share/ca-certificates/ca.crt && \
+      chmod 644 /usr/local/share/ca-certificates/ca.crt
+
+  - name: Update Config File to Server
+    copy:
+      src: redis.conf
+      dest: /etc/redis/reds.conf
+      owner: redisdb
+      group: redisdb
+      mode: "0640"
+      force: yes
+
+  - name: Update registered Certificates
+    shell: update-ca-certificates
+
